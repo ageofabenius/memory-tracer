@@ -29,6 +29,7 @@ fn main() {
     // tracing_collector.print_contents();
     // tracing_collector.stop();
 
-    let memory_intervals = tracing_collector.get_allocated_intervals();
-    dbg!(memory_intervals);
+    // let memory_intervals = tracing_collector.get_allocated_intervals();
+    // dbg!(memory_intervals);
+    tracing_collector.pretty_print();
 }

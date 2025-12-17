@@ -194,12 +194,39 @@ impl TracingCollector {
     }
 
     pub fn get_allocated_intervals(&self) -> Vec<AllocatedInterval> {
-        let mut inner_lock = self.inner.lock().unwrap();
-        Self::get_allocated_intervals_inner(&mut inner_lock)
+        let inner_lock = self.inner.lock().unwrap();
+        Self::get_allocated_intervals_inner(&inner_lock)
+    }
+
+    pub fn pretty_print(&self) {
+        let inner_lock = self.inner.lock().unwrap();
+        Self::pretty_print_inner(&inner_lock);
+    }
+
+    fn pretty_print_inner(inner_lock: &MutexGuard<TracingCollectorInner>) {
+        let memory_intervals = Self::get_allocated_intervals_inner(inner_lock);
+        if memory_intervals.is_empty() {
+            println!("[no memory allocations!]");
+            return;
+        }
+        println!("[allocation size] - gap size - :");
+        let mut s = String::new();
+        // Add first allocation before iterating over windows
+        s += &format!("[{}]", memory_intervals[0].size);
+        for window in memory_intervals.windows(2) {
+            let left = &window[0];
+            let right = &window[1];
+            let gap_size = right.start_address - left.end_exclusive;
+            if gap_size > 0 {
+                s += &format!(" - {gap_size}");
+            }
+            s += &format!(" - [{}]", right.size);
+        }
+        println!("{s}");
     }
 
     fn get_allocated_intervals_inner(
-        inner_lock: &mut MutexGuard<TracingCollectorInner>,
+        inner_lock: &MutexGuard<TracingCollectorInner>,
     ) -> Vec<AllocatedInterval> {
         let mut memory_intervals = Vec::new();
         for alloc_id in &mut inner_lock.index_by_ptr.values() {
