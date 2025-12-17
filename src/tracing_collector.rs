@@ -10,18 +10,31 @@ use crate::{ring_buffer::AllocatorEvent, tracing_allocator::TracingAllocator};
 type AllocationId = usize;
 
 #[derive(Debug, Clone)]
-struct AllocatedInterval {
+pub struct AllocatedInterval {
     id: AllocationId,
-    start: usize,
+    start_address: usize,
     size: usize,
     end_exclusive: usize,
 }
+
+// #[derive(Debug, Clone)]
+// pub struct GapInterval {
+//     start_address: usize,
+//     size: usize,
+//     end_exclusive: usize,
+// }
+
+// #[derive(Debug, Clone)]
+// pub enum MemoryInterval {
+//     Allocated(AllocatedInterval),
+//     Gap(GapInterval),
+// }
 
 impl AllocatedInterval {
     fn new(id: AllocationId, start: usize, size: usize) -> Self {
         Self {
             id,
-            start,
+            start_address: start,
             size,
             end_exclusive: start + size,
         }
@@ -168,15 +181,32 @@ impl TracingCollector {
         let _allocation_id = inner_lock.index_by_ptr.remove(&ptr_address).unwrap();
     }
 
-    fn print_contents_inner(inner_lock: &mut MutexGuard<TracingCollectorInner>) {
-        dbg!(&inner_lock.allocation_store.0);
-        dbg!(&inner_lock.index_by_ptr);
-    }
-
     pub fn print_contents(&self) {
         // println!("Acquiring lock to print");
         let mut inner_lock = self.inner.lock().unwrap();
         // println!("Acquired lock to print");
         Self::print_contents_inner(&mut inner_lock);
+    }
+
+    fn print_contents_inner(inner_lock: &mut MutexGuard<TracingCollectorInner>) {
+        dbg!(&inner_lock.allocation_store.0);
+        dbg!(&inner_lock.index_by_ptr);
+    }
+
+    pub fn get_allocated_intervals(&self) -> Vec<AllocatedInterval> {
+        let mut inner_lock = self.inner.lock().unwrap();
+        Self::get_allocated_intervals_inner(&mut inner_lock)
+    }
+
+    fn get_allocated_intervals_inner(
+        inner_lock: &mut MutexGuard<TracingCollectorInner>,
+    ) -> Vec<AllocatedInterval> {
+        let mut memory_intervals = Vec::new();
+        for alloc_id in &mut inner_lock.index_by_ptr.values() {
+            let allocation = inner_lock.allocation_store.get(*alloc_id).unwrap();
+            memory_intervals.push(allocation.clone());
+        }
+
+        memory_intervals
     }
 }
