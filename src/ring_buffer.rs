@@ -7,8 +7,15 @@ const BUFFER_CAPACITY: usize = 4096;
 
 #[derive(Clone, Copy, Debug)]
 pub enum AllocatorEvent {
-    Allocate { size: usize, ptr_address: usize },
-    Free { size: usize, ptr_address: usize },
+    Allocate {
+        size: usize,
+        ptr_address: usize,
+        context: &'static str,
+    },
+    Free {
+        size: usize,
+        ptr_address: usize,
+    },
 }
 
 pub struct RingBuffer {

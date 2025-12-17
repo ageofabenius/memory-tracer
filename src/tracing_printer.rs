@@ -27,7 +27,11 @@ impl TracingPrinter {
     fn drain_ring(&self) {
         while let Some(event) = self.ring.pop() {
             let (event_type, size, ptr) = match event {
-                AllocatorEvent::Allocate { size, ptr_address } => ("allocated", size, ptr_address),
+                AllocatorEvent::Allocate {
+                    size,
+                    ptr_address,
+                    context: _,
+                } => ("allocated", size, ptr_address),
                 AllocatorEvent::Free { size, ptr_address } => ("freed", size, ptr_address),
             };
             println!("{} {} bytes at 0x{}", event_type, size, ptr);

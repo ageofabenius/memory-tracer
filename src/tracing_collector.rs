@@ -15,6 +15,7 @@ pub struct AllocatedInterval {
     start_address: usize,
     size: usize,
     end_exclusive: usize,
+    context: &'static str,
 }
 
 // #[derive(Debug, Clone)]
@@ -31,12 +32,13 @@ pub struct AllocatedInterval {
 // }
 
 impl AllocatedInterval {
-    fn new(id: AllocationId, start: usize, size: usize) -> Self {
+    fn new(id: AllocationId, start: usize, size: usize, context: &'static str) -> Self {
         Self {
             id,
             start_address: start,
             size,
             end_exclusive: start + size,
+            context,
         }
     }
 }
@@ -53,10 +55,10 @@ impl AllocationStore {
         self.0.get(id)
     }
 
-    fn push(&mut self, size: usize, ptr_address: usize) -> AllocationId {
+    fn push(&mut self, size: usize, ptr_address: usize, context: &'static str) -> AllocationId {
         let this_id = self.0.len();
         self.0
-            .push(AllocatedInterval::new(this_id, ptr_address, size));
+            .push(AllocatedInterval::new(this_id, ptr_address, size, context));
         this_id
     }
 }
@@ -125,7 +127,7 @@ impl TracingCollector {
                     Self::poll_ring_buffer(&mut inner_lock);
                 }
 
-                sleep(Duration::from_millis(100));
+                sleep(Duration::from_millis(10));
             }
         });
     }
@@ -143,9 +145,11 @@ impl TracingCollector {
         while let Some(event) = inner_lock.tracing_allocator.ring().pop() {
             // println!("Popped an event, number: {n}");
             match event {
-                AllocatorEvent::Allocate { size, ptr_address } => {
-                    Self::record_allocation(inner_lock, size, ptr_address)
-                }
+                AllocatorEvent::Allocate {
+                    size,
+                    ptr_address,
+                    context,
+                } => Self::record_allocation(inner_lock, size, ptr_address, context),
                 AllocatorEvent::Free { size, ptr_address } => {
                     Self::record_free(inner_lock, size, ptr_address)
                 }
@@ -161,10 +165,12 @@ impl TracingCollector {
         inner_lock: &mut MutexGuard<TracingCollectorInner>,
         size: usize,
         ptr_address: usize,
+        context: &'static str,
     ) {
         // println!("Recording allocation");
         // Determine AllocationId from the store itself
-        let allocation_id: AllocationId = inner_lock.allocation_store.push(size, ptr_address);
+        let allocation_id: AllocationId =
+            inner_lock.allocation_store.push(size, ptr_address, context);
 
         // Add to index
         let res = inner_lock.index_by_ptr.insert(ptr_address, allocation_id);
@@ -206,21 +212,25 @@ impl TracingCollector {
     fn pretty_print_inner(inner_lock: &MutexGuard<TracingCollectorInner>) {
         let memory_intervals = Self::get_allocated_intervals_inner(inner_lock);
         if memory_intervals.is_empty() {
-            println!("[no memory allocations!]");
+            println!("no memory allocations!");
             return;
         }
-        println!("[allocation size] - gap size - :");
+        println!("Allocations: Size Bytes - Context");
+        println!("Gaps: Size Bytes");
         let mut s = String::new();
         // Add first allocation before iterating over windows
-        s += &format!("[{}]", memory_intervals[0].size);
+        s += &format!(
+            "{:4} - {}\n",
+            memory_intervals[0].size, memory_intervals[0].context,
+        );
         for window in memory_intervals.windows(2) {
             let left = &window[0];
             let right = &window[1];
             let gap_size = right.start_address - left.end_exclusive;
             if gap_size > 0 {
-                s += &format!(" - {gap_size}");
+                s += &format!("{:4}\n", gap_size);
             }
-            s += &format!(" - [{}]", right.size);
+            s += &format!("{:4} - {}\n", right.size, right.context,);
         }
         println!("{s}");
     }

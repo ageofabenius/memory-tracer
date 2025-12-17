@@ -3,7 +3,39 @@ use crate::ring_buffer::{AllocatorEvent, RingBuffer};
 use std::{alloc::GlobalAlloc, cell::Cell};
 
 thread_local! {
-    pub static TRACING_ENABLED: Cell<bool> = Cell::new(true);
+    static TRACING_ENABLED: Cell<bool> = Cell::new(true);
+}
+
+thread_local! {
+    static ALLOCATION_CONTEXT: Cell<&'static str> = Cell::new("static");
+}
+
+pub struct TracingContext {
+    previous: &'static str,
+}
+
+impl TracingContext {
+    pub fn enter(name: &'static str) -> Self {
+        ALLOCATION_CONTEXT.with(|context| {
+            let previous = context.get();
+
+            context.set(name);
+
+            Self { previous }
+        })
+    }
+
+    pub fn exit(&self) {
+        ALLOCATION_CONTEXT.with(|context| {
+            context.set(self.previous);
+        })
+    }
+}
+
+impl Drop for TracingContext {
+    fn drop(&mut self) {
+        self.exit();
+    }
 }
 
 pub struct TracingAllocator {
@@ -35,9 +67,12 @@ unsafe impl GlobalAlloc for TracingAllocator {
 
         TRACING_ENABLED.with(|enabled| {
             if enabled.get() {
-                self.ring.push(AllocatorEvent::Allocate {
-                    size,
-                    ptr_address: ptr as usize,
+                ALLOCATION_CONTEXT.with(|context| {
+                    self.ring.push(AllocatorEvent::Allocate {
+                        size,
+                        ptr_address: ptr as usize,
+                        context: context.get(),
+                    })
                 });
             }
         });
